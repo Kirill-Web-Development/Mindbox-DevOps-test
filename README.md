@@ -1,5 +1,5 @@
 # Mindbox тестовое задание
-Ответ находится в [app-deployment-w-HPA-and-time-scaling.yaml]([https://kubernetes.io](https://github.com/Kirill-Web-Development/Mindbox-DevOps-test/blob/main/app-deployment-w-HPA-and-time-scaling.yaml). В деплойменте учтены все вводные данные:
+Ответ находится в [app-deployment-w-HPA-and-time-scaling.yaml](https://github.com/Kirill-Web-Development/Mindbox-DevOps-test/blob/main/app-deployment-w-HPA-and-time-scaling.yaml). В деплойменте учтены все вводные данные:
 - Разная нагрузка по времени
 - Время на инициализацию приложения
 - Мультизональность
