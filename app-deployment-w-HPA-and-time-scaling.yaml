@@ -55,20 +55,19 @@ spec:
             httpGet:
               path: /healthz/startup
               port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            failureThreshold: 20 # 5 + 20*10 = 205 сек для старта
+            periodSeconds: 5
+            failureThreshold: 3 # по условию 10 сек подгимается, 5*3 = 15 сек c запасом
           readinessProbe:
             httpGet:
               path: /healthz
               port: 8080
-            initialDelaySeconds: 20
+            initialDelaySeconds: 15
             periodSeconds: 10 # readiness проба чаще чем liveness, чтобы на упавший под не шёл трафик
           livenessProbe:
             httpGet:
               path: /healthz
               port: 8080
-            initialDelaySeconds: 35
+            initialDelaySeconds: 30
             periodSeconds: 20
 
 ---
