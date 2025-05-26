@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: Mindbox-deployment
+  namespace: Mindbox-namespace
+spec:
+  selector:
+    matchLabels:
+      app: Mindbox-app
+  template:
+    metadata:
+      labels:
+        app: Mindbox-app
+    spec:
+      affinity:
+      # логика - в первую очередь разместить поды на разных нодах, во вторую очередь в разных зонах
+        podAntiAffinity:
+          # Желательно избегать размещения нескольких подов на одной ноде,
+          # но не строго, чтобы не блокировать scheduler при масштабировании >5
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - my-app
+                topologyKey: "kubernetes.io/hostname"  # Желательно 1 под на ноду
+
+          # Желательно распределять поды по зонам для отказоустойчивости,
+          # но не обязательно строго (иначе 5 подов на 3 зоны не разместить)
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - my-app
+                topologyKey: "topology.kubernetes.io/zone"  # Желательно распределение по зонам
+
+      containers:
+        - name: Mindbox-app-container
+          image: Mindbox-image:tag # в СI/CD сдесь должен быть проброшен тэг сборки, которая стриггерила пайплайн
+          resources:
+            requests:
+              cpu: "0.1"
+              memory: "128Mi"
+            limits:
+              cpu: "0.5"
+              memory: "200Mi"
+          startupProbe:
+            httpGet:
+              path: /healthz/startup
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 20 # 5 + 20*10 = 205 сек для старта
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10 # readiness проба чаще чем liveness, чтобы на упавший под не шёл трафик
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 35
+            periodSeconds: 20
+
+---
+
+# в этой реализации используются дефолтные метрики куба - metrics-server, но расчёт может опираться и на кастомные метрики
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: Mindbox-hpa
+  namespace: Mindbox-namespace
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-app
+  minReplicas: 4
+  maxReplicas: 5  # исходя из логики, чтобы 5-я нода не простаивала, но конфиг позволяет поставить и больше
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# адаптация деплоймента к снижающейся нагрузке ночью
+# desiredReplicas не должно быть > чем maxReplicas в HPA, тогда будут корректно работать вместе
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: Mindbox-time-scaler
+  namespace: Mindbox-namespace
+spec:
+  scaleTargetRef:
+    name: Mindbox-deployment
+  triggers:
+  - type: cron
+    metadata:
+      timezone: "Europe/Moscow"
+      start: "0 8 * * *"   # 8:00 → minReplicas=4
+      end: "0 20 * * *"    # 20:00 → minReplicas=2
+      desiredReplicas: "4"
+  - type: cron
+    metadata:
+      timezone: "Europe/Moscow"
+      start: "0 20 * * *"  # 20:00 → minReplicas=2
+      end: "0 8 * * *"
+      desiredReplicas: "2"
